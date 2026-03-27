@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Car Mats Shop</title>
+    <style>
+        .mat-card {
+            border: 1px solid #ccc;
+            padding: 15px;
+            margin: 10px;
+            border-radius: 8px;
+            width: 300px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <h1>🚗 定制汽车脚垫商城</h1>
+    <div class="mat-list">
+        {% for mat in mats %}
+        <div class="mat-card">
+            <h3>{{ mat.name }}</h3>
+            <p>价格：¥{{ mat.price }}</p>
+        </div>
+        {% empty %}
+        <p>暂无商品，请先在后台添加</p>
+        {% endfor %}
+    </div>
+</body>
+</html>

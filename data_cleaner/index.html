@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 数据分析平台</title>
+  <!-- Vue 3 CDN（生产请锁定版本号） -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <!-- Google Fonts: 标题用 Syne，正文用 DM Sans -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── CSS 变量（主题中心） ─────────────────────────────── */
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #161920;
+      --surface2:  #1e2130;
+      --border:    rgba(255,255,255,0.07);
+      --text:      #e8eaf0;
+      --muted:     #7b8091;
+      --primary:   #4f8ef7;
+      --primary-d: #3a72d4;
+      --success:   #3fcf8e;
+      --warn:      #f5a623;
+      --danger:    #f26e5f;
+      --radius:    12px;
+      --radius-sm: 8px;
+      --font-head: 'Syne', sans-serif;
+      --font-body: 'DM Sans', sans-serif;
+      --shadow:    0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    /* ─── 重置 & 基础 ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ─── 布局 ─────────────────────────────────────────────── */
+    #app { display: flex; height: 100vh; overflow: hidden; }
+
+    /* 侧边栏 */
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      padding: 24px 16px;
+      gap: 4px;
+    }
+    .sidebar-logo {
+      font-family: var(--font-head);
+      font-size: 18px;
+      font-weight: 800;
+      color: var(--primary);
+      letter-spacing: -0.5px;
+      padding: 0 8px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 12px;
+    }
+    .sidebar-logo span { color: var(--text); }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: all .15s;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+    .nav-item:hover { color: var(--text); background: var(--surface2); }
+    .nav-item.active { color: var(--primary); background: rgba(79,142,247,.12); }
+    .nav-icon { font-size: 16px; width: 20px; text-align: center; }
+
+    /* 主内容区 */
+    .main { flex: 1; overflow-y: auto; padding: 32px 40px; }
+    .page-title {
+      font-family: var(--font-head);
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 4px;
+      letter-spacing: -0.5px;
+    }
+    .page-sub { color: var(--muted); font-size: 13px; margin-bottom: 28px; }
+
+    /* ─── 卡片 ─────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      margin-bottom: 20px;
+    }
+    .card-title {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 16px;
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* ─── 按钮 ─────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      border: none;
+      cursor: pointer;
+      font-family: var(--font-body);
+      font-size: 13.5px;
+      font-weight: 600;
+      transition: all .15s;
+    }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-d); }
+    .btn-ghost {
+      background: var(--surface2);
+      color: var(--text);
+    }
+    .btn-ghost:hover:not(:disabled) { background: #252a3a; }
+    .btn-sm { padding: 6px 12px; font-size: 12.5px; }
+
+    /* ─── 输入框 ────────────────────────────────────────────── */
+    .input, .textarea, select {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 13.5px;
+      padding: 9px 13px;
+      width: 100%;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .input:focus, .textarea:focus, select:focus {
+      border-color: var(--primary);
+    }
+    .textarea { resize: vertical; min-height: 80px; }
+    select option { background: var(--surface2); }
+
+    /* ─── 聊天区 ─────────────────────────────────────────────── */
+    .chat-window {
+      height: 360px;
+      overflow-y: auto;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .chat-empty { color: var(--muted); font-size: 13px; text-align: center; margin: auto; }
+    .msg { display: flex; flex-direction: column; max-width: 80%; }
+    .msg.user { align-self: flex-end; align-items: flex-end; }
+    .msg.ai   { align-self: flex-start; align-items: flex-start; }
+    .msg-bubble {
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.user .msg-bubble { background: var(--primary); color: #fff; border-bottom-right-radius: 4px; }
+    .msg.ai .msg-bubble { background: var(--surface2); color: var(--text); border-bottom-left-radius: 4px; }
+    .msg-time { font-size: 11px; color: var(--muted); margin-top: 4px; padding: 0 4px; }
+    .chat-input-row { display: flex; gap: 8px; }
+    .chat-input-row .input { flex: 1; }
+
+    /* ─── 文件上传区 ─────────────────────────────────────────── */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 36px 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all .2s;
+      position: relative;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--primary);
+      background: rgba(79,142,247,.05);
+    }
+    .upload-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-icon { font-size: 32px; margin-bottom: 8px; }
+    .upload-hint { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
+    .file-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 5px 10px;
+      font-size: 12.5px;
+      margin-top: 10px;
+    }
+    .file-badge .remove { cursor: pointer; color: var(--muted); }
+    .file-badge .remove:hover { color: var(--danger); }
+
+    /* ─── 进度 & 状态 ────────────────────────────────────────── */
+    .progress-bar {
+      height: 4px;
+      background: var(--surface2);
+      border-radius: 99px;
+      overflow: hidden;
+      margin: 12px 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), #7eb8ff);
+      border-radius: 99px;
+      transition: width .4s;
+    }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+      margin: 6px 0;
+    }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ─── 结果展示 ────────────────────────────────────────────── */
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap: 12px; margin-bottom: 16px; }
+    .stat-box {
+      background: var(--surface2);
+      border-radius: var(--radius-sm);
+      padding: 14px 16px;
+      text-align: center;
+    }
+    .stat-val { font-size: 22px; font-weight: 700; color: var(--primary); font-family: var(--font-head); }
+    .stat-label { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+
+    .score-ring {
+      width: 100px; height: 100px;
+      border-radius: 50%;
+      background: conic-gradient(var(--primary) calc(var(--pct) * 3.6deg), var(--surface2) 0deg);
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      margin: 0 auto 16px;
+    }
+    .score-ring::after {
+      content: '';
+      position: absolute;
+      inset: 10px;
+      background: var(--surface);
+      border-radius: 50%;
+    }
+    .score-ring-val {
+      position: relative; z-index: 1;
+      font-family: var(--font-head);
+      font-size: 22px;
+      font-weight: 800;
+      color: var(--text);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11.5px;
+      font-weight: 600;
+      margin: 2px;
+    }
+    .tag-green  { background: rgba(63,207,142,.15); color: var(--success); }
+    .tag-warn   { background: rgba(245,166,35,.15);  color: var(--warn); }
+    .tag-danger { background: rgba(242,110,95,.15);  color: var(--danger); }
+
+    .list-block { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+    .list-block li {
+      display: flex; align-items: flex-start; gap: 8px;
+      font-size: 13px; color: var(--text);
+    }
+    .list-block li::before { content: '→'; color: var(--primary); flex-shrink: 0; }
+
+    /* ─── Toast 通知 ──────────────────────────────────────────── */
+    .toast-wrap {
+      position: fixed; bottom: 24px; right: 24px;
+      display: flex; flex-direction: column; gap: 8px;
+      z-index: 999;
+    }
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 10px 16px;
+      font-size: 13px;
+      display: flex; align-items: center; gap: 8px;
+      box-shadow: var(--shadow);
+      animation: slideIn .2s ease;
+    }
+    .toast.success { border-left: 3px solid var(--success); }
+    .toast.error   { border-left: 3px solid var(--danger); }
+    .toast.info    { border-left: 3px solid var(--primary); }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ─── 分隔 & 标签行 ───────────────────────────────────────── */
+    .row { display: flex; gap: 12px; align-items: flex-start; }
+    .row > * { flex: 1; }
+    .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; font-weight: 500; }
+    hr.sep { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ───────────── 侧边栏导航 ───────────── -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">AI<span>Analyst</span></div>
+
+    <button
+      v-for="item in navItems" :key="item.id"
+      class="nav-item"
+      :class="{ active: currentPage === item.id }"
+      @click="currentPage = item.id"
+    >
+      <span class="nav-icon">{{ item.icon }}</span>
+      {{ item.label }}
+    </button>
+  </nav>
+
+  <!-- ───────────── 主内容区 ───────────── -->
+  <main class="main">
+
+    <!-- ══════════ 页面：AI 对话 ══════════ -->
+    <div v-if="currentPage === 'chat'">
+      <p class="page-title">AI 对话</p>
+      <p class="page-sub">向 AI 提问，获取简短精准的回答</p>
+
+      <div class="card">
+        <div class="card-title">💬 对话窗口</div>
+
+        <!-- 消息列表 -->
+        <div class="chat-window" ref="chatWindow">
+          <div v-if="messages.length === 0" class="chat-empty">
+            暂无对话，请在下方输入问题
+          </div>
+          <div
+            v-for="msg in messages" :key="msg.id"
+            class="msg" :class="msg.role"
+          >
+            <div class="msg-bubble">{{ msg.content }}</div>
+            <div class="msg-time">{{ msg.time }}</div>
+          </div>
+        </div>
+
+        <!-- 输入行 -->
+        <div class="chat-input-row">
+          <input
+            class="input"
+            v-model="chatInput"
+            placeholder="输入问题，按 Enter 发送…"
+            @keydown.enter="sendMessage"
+            :disabled="chatLoading"
+          />
+          <button
+            class="btn btn-primary"
+            @click="sendMessage"
+            :disabled="chatLoading || !chatInput.trim()"
+          >
+            <div v-if="chatLoading" class="spinner"></div>
+            <span v-else>发送</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 页面：数据清洗 ══════════ -->
+    <div v-if="currentPage === 'clean'">
+      <p class="page-title">数据清洗</p>
+      <p class="page-sub">上传 CSV 或 Excel 文件，自动去重、去空行、标准化字段</p>
+
+      <div class="card">
+        <div class="card-title">📁 上传文件</div>
+
+        <!-- 拖拽上传区 -->
+        <div
+          class="upload-zone"
+          :class="{ 'drag-over': isDragOver }"
+          @dragover.prevent="isDragOver = true"
+          @dragleave="isDragOver = false"
+          @drop.prevent="handleDrop"
+        >
+          <input type="file" accept=".csv,.xlsx,.xls" @change="handleFileSelect" />
+          <div class="upload-icon">📂</div>
+          <div>点击选择或拖拽文件至此处</div>
+          <div class="upload-hint">支持 .csv、.xlsx、.xls，最大 10 MB</div>
+        </div>
+
+        <!-- 已选文件 -->
+        <div v-if="cleanFile" style="margin-top:12px">
+          <div class="file-badge">
+            📄 {{ cleanFile.name }}
+            <span class="remove" @click="cleanFile = null; cleanResult = null">✕</span>
+          </div>
+        </div>
+
+        <hr class="sep" />
+
+        <!-- 清洗规则配置 -->
+        <div class="card-title">⚙️ 清洗规则</div>
+        <div class="row">
+          <div>
+            <div class="label">缺失值处理策略</div>
+            <select v-model="cleanConfig.fillna_strategy" class="input">
+              <option value="">不填充（保留 NaN）</option>
+              <option value="mean">均值填充（数值列）</option>
+              <option value="median">中位数填充（数值列）</option>
+              <option value="mode">众数填充</option>
+            </select>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:10px; padding-top:20px">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" v-model="cleanConfig.drop_duplicates" />
+              删除重复行
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px">
+              <input type="checkbox" v-model="cleanConfig.strip_strings" />
+              去除字符串首尾空格
+            </label>
+          </div>
+        </div>
+
+        <button
+          class="btn btn-primary"
+          style="margin-top:16px"
+          @click="runClean"
+          :disabled="!cleanFile || cleanLoading"
+        >
+          <div v-if="cleanLoading" class="spinner"></div>
+          <span v-else>🧹 开始清洗</span>
+        </button>
+
+        <!-- 进度条 -->
+        <div v-if="cleanLoading" class="status-row" style="margin-top:14px">
+          <div class="spinner"></div> 正在清洗中，请稍候…
+        </div>
+        <div v-if="cleanLoading">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: cleanProgress + '%' }"></div>
+          </div>
+        </div>
+
+        <!-- 清洗结果 -->
+        <div v-if="cleanResult" style="margin-top:20px">
+          <hr class="sep" />
+          <div class="card-title">✅ 清洗结果</div>
+          <div class="stat-grid">
+            <div class="stat-box">
+              <div class="stat-val">{{ cleanResult.total_before }}</div>
+              <div class="stat-label">清洗前行数</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-val">{{ cleanResult.total_after }}</div>
+              <div class="stat-label">清洗后行数</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-val" style="color:var(--danger)">{{ cleanResult.removed }}</div>
+              <div class="stat-label">移除行数</div>
+            </div>
+          </div>
+          <p style="font-size:13px;color:var(--muted)">
+            文件已保存：<code style="color:var(--primary)">cleaned/{{ cleanResult.filename }}</code>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ 页面：报告生成 ══════════ -->
+    <div v-if="currentPage === 'report'">
+      <p class="page-title">AI 质量报告</p>
+      <p class="page-sub">对已清洗的文件调用 AI 生成数据质量分析报告</p>
+
+      <div class="card">
+        <div class="card-title">📋 输入已清洗文件名</div>
+        <div class="row" style="max-width:480px">
+          <div>
+            <div class="label">文件名（含扩展名，需先完成清洗步骤）</div>
+            <input
+              class="input"
+              v-model="reportFilename"
+              placeholder="例如：data.csv"
+            />
+          </div>
+        </div>
+        <button
+          class="btn btn-primary"
+          style="margin-top:14px"
+          @click="runReport"
+          :disabled="!reportFilename.trim() || reportLoading"
+        >
+          <div v-if="reportLoading" class="spinner"></div>
+          <span v-else>🤖 生成报告</span>
+        </button>
+
+        <div v-if="reportLoading" class="status-row" style="margin-top:14px">
+          <div class="spinner"></div> AI 正在分析数据，约需 5~10 秒…
+        </div>
+
+        <!-- 报告结果 -->
+        <div v-if="reportResult">
+          <hr class="sep" />
+          <div class="card-title">📊 报告摘要</div>
+
+          <!-- 质量分环形图 -->
+          <div style="text-align:center">
+            <div
+              class="score-ring"
+              :style="{ '--pct': reportResult.quality_score }"
+            >
+              <div class="score-ring-val">{{ reportResult.quality_score }}</div>
+            </div>
+            <div style="font-size:13px;color:var(--muted);margin-bottom:16px">数据质量得分（满分100）</div>
+            <div>
+              <span
+                class="tag"
+                :class="reportResult.is_production_ready ? 'tag-green' : 'tag-warn'"
+              >
+                {{ reportResult.is_production_ready ? '✅ 可上生产' : '⚠️ 不建议上生产' }}
+              </span>
+            </div>
+          </div>
+
+          <hr class="sep" />
+
+          <div class="row">
+            <div>
+              <div class="label" style="margin-bottom:10px">🔴 发现的问题</div>
+              <ul class="list-block">
+                <li v-for="(issue, i) in reportResult.issues" :key="i">{{ issue }}</li>
+              </ul>
+            </div>
+            <div>
+              <div class="label" style="margin-bottom:10px">💡 改进建议</div>
+              <ul class="list-block">
+                <li v-for="(rec, i) in reportResult.recommendations" :key="i">{{ rec }}</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ───────────── Toast 通知层 ───────────── -->
+  <div class="toast-wrap">
+    <div
+      v-for="t in toasts" :key="t.id"
+      class="toast" :class="t.type"
+    >
+      {{ t.icon }} {{ t.msg }}
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ============================================================
+// Vue 3 应用入口
+// ============================================================
+const { createApp, ref, nextTick } = Vue
+
+// 后端地址：本地开发时与 uvicorn 保持一致
+const API_BASE = 'http://127.0.0.1:8000'
+
+createApp({
+  setup() {
+    // ──────────────────────────────────────────
+    // 导航
+    // ──────────────────────────────────────────
+    const navItems = [
+      { id: 'chat',   icon: '💬', label: 'AI 对话'  },
+      { id: 'clean',  icon: '🧹', label: '数据清洗' },
+      { id: 'report', icon: '📊', label: '质量报告' },
+    ]
+    const currentPage = ref('chat')
+
+    // ──────────────────────────────────────────
+    // Toast 通知
+    // ──────────────────────────────────────────
+    const toasts = ref([])
+    function showToast(msg, type = 'info') {
+      const icons = { info: 'ℹ️', success: '✅', error: '❌' }
+      const t = { id: Date.now(), msg, type, icon: icons[type] }
+      toasts.value.push(t)
+      setTimeout(() => {
+        toasts.value = toasts.value.filter(x => x.id !== t.id)
+      }, 3500)
+    }
+
+    // ──────────────────────────────────────────
+    // 公共 API 请求工具
+    // ──────────────────────────────────────────
+    async function apiFetch(url, options = {}) {
+      const resp = await fetch(API_BASE + url, options)
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: '请求失败' }))
+        throw new Error(err.detail || `HTTP ${resp.status}`)
+      }
+      return resp.json()
+    }
+
+    // ══════════════════════════════════════════
+    // 页面一：AI 对话
+    // ══════════════════════════════════════════
+    const messages   = ref([])  // { id, role: 'user'|'ai', content, time }
+    const chatInput  = ref('')
+    const chatLoading = ref(false)
+    const chatWindow  = ref(null)   // 模板 ref，用于自动滚底
+
+    function nowTime() {
+      return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+    }
+
+    async function sendMessage() {
+      const text = chatInput.value.trim()
+      if (!text || chatLoading.value) return
+
+      // 添加用户消息
+      messages.value.push({ id: Date.now(), role: 'user', content: text, time: nowTime() })
+      chatInput.value = ''
+      chatLoading.value = true
+
+      // 滚动到底部（等 DOM 更新后）
+      await nextTick()
+      if (chatWindow.value) chatWindow.value.scrollTop = chatWindow.value.scrollHeight
+
+      try {
+        const data = await apiFetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+        messages.value.push({ id: Date.now() + 1, role: 'ai', content: data.answer, time: nowTime() })
+      } catch (e) {
+        showToast(e.message, 'error')
+        messages.value.push({ id: Date.now() + 1, role: 'ai', content: '⚠️ 请求失败：' + e.message, time: nowTime() })
+      } finally {
+        chatLoading.value = false
+        await nextTick()
+        if (chatWindow.value) chatWindow.value.scrollTop = chatWindow.value.scrollHeight
+      }
+    }
+
+    // ══════════════════════════════════════════
+    // 页面二：数据清洗
+    // ══════════════════════════════════════════
+    const cleanFile     = ref(null)
+    const isDragOver    = ref(false)
+    const cleanLoading  = ref(false)
+    const cleanProgress = ref(0)
+    const cleanResult   = ref(null)
+    const cleanConfig   = ref({
+      drop_duplicates:  true,
+      drop_all_na_rows: true,
+      fillna_strategy:  '',
+      strip_strings:    true,
+    })
+
+    // 允许的文件类型（前端先拦截）
+    const ALLOWED_EXTS = ['.csv', '.xlsx', '.xls']
+
+    function validateFile(file) {
+      const ext = '.' + file.name.split('.').pop().toLowerCase()
+      if (!ALLOWED_EXTS.includes(ext)) {
+        showToast(`不支持的文件类型：${ext}，仅接受 ${ALLOWED_EXTS.join(' / ')}`, 'error')
+        return false
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        showToast('文件过大，上限 10 MB', 'error')
+        return false
+      }
+      return true
+    }
+
+    function handleFileSelect(e) {
+      const file = e.target.files[0]
+      if (file && validateFile(file)) {
+        cleanFile.value = file
+        cleanResult.value = null
+      }
+    }
+
+    function handleDrop(e) {
+      isDragOver.value = false
+      const file = e.dataTransfer.files[0]
+      if (file && validateFile(file)) {
+        cleanFile.value = file
+        cleanResult.value = null
+      }
+    }
+
+    // 模拟进度条（后端无进度回调时给用户视觉反馈）
+    function fakeProgress(targetPct, durationMs) {
+      cleanProgress.value = 0
+      const step = targetPct / (durationMs / 80)
+      const timer = setInterval(() => {
+        cleanProgress.value = Math.min(cleanProgress.value + step, targetPct)
+        if (cleanProgress.value >= targetPct) clearInterval(timer)
+      }, 80)
+      return timer
+    }
+
+    async function runClean() {
+      if (!cleanFile.value) return
+      cleanLoading.value = true
+      cleanResult.value = null
+
+      const timer = fakeProgress(85, 2000)
+      const form = new FormData()
+      form.append('file', cleanFile.value)
+
+      // 将配置作为 query 参数拼接
+      const params = new URLSearchParams({
+        drop_duplicates:  cleanConfig.value.drop_duplicates,
+        drop_all_na_rows: cleanConfig.value.drop_all_na_rows,
+        strip_strings:    cleanConfig.value.strip_strings,
+      })
+      if (cleanConfig.value.fillna_strategy) {
+        params.set('fillna_strategy', cleanConfig.value.fillna_strategy)
+      }
+
+      try {
+        const data = await apiFetch(`/data/clean?${params}`, { method: 'POST', body: form })
+        clearInterval(timer)
+        cleanProgress.value = 100
+        cleanResult.value = data
+        showToast(`清洗完成，移除 ${data.removed} 行`, 'success')
+      } catch (e) {
+        clearInterval(timer)
+        showToast(e.message, 'error')
+      } finally {
+        cleanLoading.value = false
+      }
+    }
+
+    // ══════════════════════════════════════════
+    // 页面三：质量报告
+    // ══════════════════════════════════════════
+    const reportFilename = ref('')
+    const reportLoading  = ref(false)
+    const reportResult   = ref(null)
+
+    async function runReport() {
+      const filename = reportFilename.value.trim()
+      if (!filename) return
+      reportLoading.value = true
+      reportResult.value = null
+
+      try {
+        const data = await apiFetch('/generate/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename }),
+        })
+        reportResult.value = data.report
+        showToast('报告生成成功！', 'success')
+      } catch (e) {
+        showToast(e.message, 'error')
+      } finally {
+        reportLoading.value = false
+      }
+    }
+
+    // ──────────────────────────────────────────
+    // 暴露给模板
+    // ──────────────────────────────────────────
+    return {
+      navItems, currentPage,
+      toasts,
+      // chat
+      messages, chatInput, chatLoading, chatWindow, sendMessage,
+      // clean
+      cleanFile, isDragOver, cleanLoading, cleanProgress, cleanResult,
+      cleanConfig, handleFileSelect, handleDrop, runClean,
+      // report
+      reportFilename, reportLoading, reportResult, runReport,
+    }
+  }
+}).mount('#app')
+</script>
+</body>
+</html>

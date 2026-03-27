@@ -1,0 +1,10 @@
+{
+  "quality_score": 98,
+  "issues": [
+    "TotalCharges列有11个缺失值"
+  ],
+  "recommendations": [
+    "填充或删除TotalCharges列中的缺失值"
+  ],
+  "is_production_ready": false
+}

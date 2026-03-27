@@ -1,0 +1,1 @@
+{"quality_score": 85, "issues": ["TotalCharges列的数据类型应为数值型，但当前为字符串型。", "部分列（如gender、Partner等）的值可能包含不一致的大小写或空格。"], "recommendations": ["将TotalCharges列转换为数值型，例如float64。", "对字符串类型的列进行标准化处理，确保数据一致性。"], "is_production_ready": false}
