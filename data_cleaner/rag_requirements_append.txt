@@ -1,0 +1,10 @@
+# ============================================================
+# RAG 新增依赖（在原有 requirements.txt 基础上追加）
+# ============================================================
+
+chromadb==0.5.3
+langchain==0.2.16
+langchain-community==0.2.16
+dashscope>=1.14.0          # 千问 Embedding
+pypdf>=4.0.0               # PDF 解析
+unstructured>=0.14.0       # Markdown 解析

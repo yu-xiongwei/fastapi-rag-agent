@@ -10,7 +10,11 @@ ai_api.py — AI 数据分析后端服务
 import os
 import json
 import logging
+import shutil
+import sys
+import getpass
 from typing import Any, Dict, Optional
+from rag_engine import rag_engine, ALLOWED_EXTENSIONS as RAG_EXTENSIONS
 
 # ============================================================
 # 2. 第三方库导入
@@ -39,7 +43,33 @@ for _key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY"):
 os.environ["NO_PROXY"] = "*"
 
 # ============================================================
-# 5. 应用初始化 & CORS
+# 5. 初始化 API Key 和 OpenAI 客户端（模块级，确保所有进程可用）
+# ============================================================
+_api_key = os.environ.get("DASHSCOPE_API_KEY", "").strip()
+
+# 如果环境变量没有，尝试交互输入（仅在直接运行时有效）
+if not _api_key and __name__ == "__main__":
+    try:
+        _api_key = getpass.getpass("请输入 DashScope API Key（输入不显示）: ").strip()
+    except Exception:
+        _api_key = input("请输入 DashScope API Key: ").strip()
+
+if not _api_key:
+    print("❌ 未提供 API Key，程序退出")
+    sys.exit(1)
+
+# 将 Key 写回环境变量，供 rag_engine 使用
+os.environ["DASHSCOPE_API_KEY"] = _api_key
+
+# 初始化 OpenAI 客户端
+client = OpenAI(
+    api_key=_api_key,
+    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+)
+logger.info("✅ API Key 已加载，客户端初始化完成")
+
+# ============================================================
+# 6. 应用初始化 & CORS
 # ============================================================
 app = FastAPI(title="AI 数据分析服务", version="1.1.0")
 
@@ -54,21 +84,6 @@ app.add_middleware(
 )
 
 # ============================================================
-# 6. OpenAI 客户端（API Key 从环境变量读取，不硬编码）
-# ============================================================
-# 启动前在终端执行：set DASHSCOPE_API_KEY=sk-xxxxxx  (Windows)
-#                   export DASHSCOPE_API_KEY=sk-xxxxxx (Mac/Linux)
-_api_key = os.environ.get("DASHSCOPE_API_KEY")
-if not _api_key:
-    # 开发阶段给出明确提示，而不是静默失败
-    logger.warning("⚠️  未设置环境变量 DASHSCOPE_API_KEY，AI 功能将不可用！")
-
-client = OpenAI(
-    api_key=_api_key or "MISSING_KEY",
-    base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
-)
-
-# ============================================================
 # 7. 常量配置
 # ============================================================
 MAX_FILE_SIZE_MB = 10                          # 文件大小上限
@@ -76,6 +91,7 @@ MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 ALLOWED_EXTENSIONS = {".csv", ".xlsx", ".xls"} # 允许的文件类型
 OUTPUT_DIR = "output"
 CLEANED_DIR = "cleaned"
+RAG_UPLOAD_DIR = "rag_docs"              # RAG 文档上传目录
 
 # ============================================================
 # 8. Pydantic 请求/响应模型
@@ -176,20 +192,51 @@ def serialize_for_json(data: Any) -> Any:
     return data
 
 
-def safe_json_parse(text: str) -> Dict[str, Any]:
-    """剥离模型可能输出的 Markdown 代码块，再解析 JSON"""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = [l for l in text.splitlines() if l.strip()]
-        if lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].endswith("```"):
-            lines = lines[:-1]
-        text = "\n".join(lines)
+import json
+import re
+from typing import Dict, Any, Optional
+
+def safe_json_parse(text: str) -> Optional[Dict[str, Any]]:
+    """防御性 JSON 解析，处理 LLM 输出的各种格式异常"""
+    if not text:
+        return None
+
+    # 第一层：最理想情况，直接解析
     try:
         return json.loads(text)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"JSON 解析失败：{e.msg}，原文片段：{text[:200]}") from e
+    except Exception:
+        pass
+
+    # 第二层：正则抠出 {...}（处理前后有废话的情况）
+    try:
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+    except Exception:
+        pass
+
+    # 第三层：去掉 Markdown 代码块标记再抠
+    try:
+        # 移除 ```json 和 ``` 标记
+        text_clean = re.sub(r'```json\s*|```', '', text)
+        match = re.search(r'\{.*\}', text_clean, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+    except Exception:
+        pass
+
+    # 第四层：修复中文标点再抠（处理中文冒号、中文引号等情况）
+    try:
+        # 替换中文标点为英文标点
+        text_fix = text.replace('：', ':').replace('“', '"').replace('”', '"')
+        match = re.search(r'\{.*\}', text_fix, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+    except Exception:
+        pass
+
+    # 全部失败，返回 None（绝不抛异常导致程序崩溃）
+    return None
 
 # ============================================================
 # 10. 路由接口
@@ -203,8 +250,6 @@ def health_check():
 @app.post("/ask", summary="AI 对话")
 def ask(question: Question):
     """发送一条问题，返回 AI 的简短回答"""
-    if not _api_key:
-        raise HTTPException(status_code=503, detail="AI 服务未配置（缺少 DASHSCOPE_API_KEY）")
     try:
         resp = client.chat.completions.create(
             model="qwen-turbo",
@@ -271,9 +316,6 @@ async def clean_data(
 @app.post("/generate/report", summary="对已清洗文件生成 AI 质量报告")
 def generate_report(req: ReportRequest):
     """读取已清洗文件，调用 AI 生成 JSON 格式的数据质量报告"""
-    if not _api_key:
-        raise HTTPException(status_code=503, detail="AI 服务未配置（缺少 DASHSCOPE_API_KEY）")
-
     csv_path = os.path.join(CLEANED_DIR, req.filename)
     if not os.path.exists(csv_path):
         raise HTTPException(status_code=404, detail=f"文件不存在：{csv_path}，请先调用 /data/clean")
@@ -336,3 +378,125 @@ def generate_report(req: ReportRequest):
     except Exception as e:
         logger.error("报告生成失败：%s", e)
         raise HTTPException(status_code=502, detail=f"报告生成失败：{e}")
+
+
+# ============================================================
+# RAG 接口 1：上传文档并向量化
+# ============================================================
+@app.post("/rag/upload", summary="上传文档并向量化存入知识库")
+async def rag_upload(file: UploadFile = File(...)):
+    """
+    支持格式：TXT / PDF / Markdown
+    流程：保存文件 → 解析分块 → 向量化 → 存入 ChromaDB
+    """
+    import shutil
+    from rag_engine import rag_engine, ALLOWED_EXTENSIONS as RAG_EXTENSIONS
+
+    ext = os.path.splitext(file.filename or "")[1].lower()
+    if ext not in RAG_EXTENSIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"不支持的格式 '{ext}'，仅接受 {sorted(RAG_EXTENSIONS)}"
+        )
+
+    os.makedirs(RAG_UPLOAD_DIR, exist_ok=True)
+    save_path = os.path.join(RAG_UPLOAD_DIR, file.filename)
+
+    try:
+        # 保存上传文件到本地
+        with open(save_path, "wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        # 向量化存储
+        result = rag_engine.add_document(save_path, file.filename)
+        logger.info("RAG 文档上传成功：%s", file.filename)
+        return {"success": True, **result}
+
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error("RAG 上传失败：%s", e)
+        raise HTTPException(status_code=500, detail=f"向量化失败：{e}")
+
+
+# ============================================================
+# RAG 接口 2：基于知识库的问答
+# ============================================================
+@app.post("/rag/ask", summary="基于知识库检索 + AI 回答")
+def rag_ask(question: Question):
+    """
+    流程：问题向量化 → ChromaDB 检索相关片段 → 拼接 Prompt → 千问生成回答
+    """
+    from rag_engine import rag_engine
+
+    try:
+        # Step 1：检索相关片段
+        retrieved = rag_engine.retrieve(question.text, top_k=3)
+
+        if not retrieved:
+            return {
+                "answer": "知识库暂无相关文档，请先通过 /rag/upload 上传文档。",
+                "sources": [],
+            }
+
+        # Step 2：拼接检索结果作为上下文
+        context = "\n\n---\n\n".join(
+            f"【来源：{r['filename']}（相关度 {r['score']}）】\n{r['text']}"
+            for r in retrieved
+        )
+
+        # Step 3：构造 RAG Prompt
+        system_prompt = (
+            "你是一个专业的问答助手。请严格基于以下【知识库内容】回答用户问题。\n"
+            '如果知识库中没有相关信息，请明确说明"知识库中未找到相关内容"，不要编造。\n'
+            "回答要简洁、准确，可适当引用来源文件名。"
+        )
+        user_prompt = f"【知识库内容】\n{context}\n\n【用户问题】\n{question.text}"
+
+        # Step 4：调用千问生成回答
+        resp = client.chat.completions.create(
+            model="qwen-turbo",
+            temperature=0,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+        answer = resp.choices[0].message.content
+
+        return {
+            "answer": answer,
+            "sources": [
+                {"filename": r["filename"], "score": r["score"], "snippet": r["text"][:100] + "..."}
+                for r in retrieved
+            ],
+        }
+
+    except Exception as e:
+        logger.error("RAG 问答失败：%s", e)
+        raise HTTPException(status_code=502, detail=f"RAG 问答失败：{e}")
+
+
+# ============================================================
+# RAG 接口 3：查看知识库中已上传的文档列表
+# ============================================================
+@app.get("/rag/docs", summary="查看知识库中已上传的文档列表")
+def rag_list_docs():
+    """返回当前 ChromaDB 中已向量化的所有文档名"""
+    from rag_engine import rag_engine
+
+    try:
+        docs = rag_engine.list_documents()
+        return {"total": len(docs), "documents": docs}
+    except Exception as e:
+        logger.error("获取文档列表失败：%s", e)
+        raise HTTPException(status_code=500, detail=f"获取列表失败：{e}")
+
+
+# ============================================================
+# 启动入口
+# ============================================================
+if __name__ == "__main__":
+    import uvicorn
+    print("🚀 启动 FastAPI 服务，监听 http://127.0.0.1:8000")
+    uvicorn.run("ai_api:app", host="127.0.0.1", port=8000, reload=False)

@@ -352,7 +352,7 @@
       v-for="item in navItems" :key="item.id"
       class="nav-item"
       :class="{ active: currentPage === item.id }"
-      @click="currentPage = item.id"
+      @click="setPage(item.id)"
     >
       <span class="nav-icon">{{ item.icon }}</span>
       {{ item.label }}
@@ -365,10 +365,13 @@
     <!-- ══════════ 页面：AI 对话 ══════════ -->
     <div v-if="currentPage === 'chat'">
       <p class="page-title">AI 对话</p>
-      <p class="page-sub">向 AI 提问，获取简短精准的回答</p>
+      <p class="page-sub">向 AI 提问，获取严谨、准确的回答（零幻觉模式 · 支持多轮对话）</p>
 
       <div class="card">
-        <div class="card-title">💬 对话窗口</div>
+        <div class="card-title" style="justify-content:space-between">
+          <span>💬 对话窗口</span>
+          <button class="btn btn-ghost btn-sm" @click="clearChat" :disabled="messages.length === 0">🗑️ 清空对话</button>
+        </div>
 
         <!-- 消息列表 -->
         <div class="chat-window" ref="chatWindow">
@@ -581,6 +584,91 @@
       </div>
     </div>
 
+    <!-- ══════════ 页面：RAG 知识库问答 ══════════ -->
+    <div v-if="currentPage === 'rag'">
+      <p class="page-title">🧠 知识库问答</p>
+      <p class="page-sub">上传文档到知识库，再基于知识库向 AI 提问</p>
+
+      <!-- 上传文档卡片 -->
+      <div class="card">
+        <div class="card-title">📂 上传文档到知识库</div>
+        <div class="upload-zone" style="padding:24px 20px" @dragover.prevent @drop.prevent>
+          <input type="file" accept=".txt,.pdf,.md" @change="handleRagFileSelect" />
+          <div class="upload-icon">📄</div>
+          <div>点击选择文档</div>
+          <div class="upload-hint">支持 .txt / .pdf / .md，最大 20 MB</div>
+        </div>
+        <div v-if="ragFile" style="margin-top:10px">
+          <div class="file-badge">
+            📄 {{ ragFile.name }}
+            <span class="remove" @click="ragFile = null">✕</span>
+          </div>
+        </div>
+        <button
+          class="btn btn-primary"
+          style="margin-top:14px"
+          @click="uploadRagDoc"
+          :disabled="!ragFile || ragUploadLoading"
+        >
+          <div v-if="ragUploadLoading" class="spinner"></div>
+          <span v-else>⬆️ 向量化并存入知识库</span>
+        </button>
+        <div v-if="ragUploadResult" style="margin-top:12px;font-size:13px;color:var(--success)">
+          ✅ 已向量化：{{ ragUploadResult.filename || ragFile?.name }}，共 {{ ragUploadResult.chunks || '—' }} 个片段
+        </div>
+      </div>
+
+      <!-- 已有文档列表 -->
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between">
+          <span>📚 知识库文档列表</span>
+          <button class="btn btn-ghost btn-sm" @click="loadRagDocs" :disabled="ragDocLoading">
+            <div v-if="ragDocLoading" class="spinner"></div>
+            <span v-else>🔄 刷新</span>
+          </button>
+        </div>
+        <div v-if="ragDocList.length === 0" style="color:var(--muted);font-size:13px">
+          暂无文档，请先上传
+        </div>
+        <div v-else style="display:flex;flex-wrap:wrap;gap:8px">
+          <div v-for="doc in ragDocList" :key="doc" class="file-badge">
+            📄 {{ doc }}
+          </div>
+        </div>
+      </div>
+
+      <!-- 知识库对话卡片 -->
+      <div class="card">
+        <div class="card-title">💬 基于知识库提问</div>
+        <div class="chat-window" ref="ragWindow">
+          <div v-if="ragMessages.length === 0" class="chat-empty">
+            请先上传文档，再在下方输入问题
+          </div>
+          <div v-for="msg in ragMessages" :key="msg.id" class="msg" :class="msg.role">
+            <div class="msg-bubble">{{ msg.content }}</div>
+            <div class="msg-time">{{ msg.time }}</div>
+          </div>
+        </div>
+        <div class="chat-input-row">
+          <input
+            class="input"
+            v-model="ragInput"
+            placeholder="基于知识库提问，按 Enter 发送…"
+            @keydown.enter="sendRagMessage"
+            :disabled="ragLoading"
+          />
+          <button
+            class="btn btn-primary"
+            @click="sendRagMessage"
+            :disabled="ragLoading || !ragInput.trim()"
+          >
+            <div v-if="ragLoading" class="spinner"></div>
+            <span v-else>发送</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
   </main>
 
   <!-- ───────────── Toast 通知层 ───────────── -->
@@ -613,6 +701,7 @@ createApp({
       { id: 'chat',   icon: '💬', label: 'AI 对话'  },
       { id: 'clean',  icon: '🧹', label: '数据清洗' },
       { id: 'report', icon: '📊', label: '质量报告' },
+      { id: 'rag',    icon: '🧠', label: '知识库问答' },
     ]
     const currentPage = ref('chat')
 
@@ -653,12 +742,21 @@ createApp({
       return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
     }
 
+    // 多轮对话历史 { role: 'user'|'assistant', content: string }[]
+    const chatHistory = ref([])
+
+    function clearChat() {
+      messages.value = []
+      chatHistory.value = []
+    }
+
     async function sendMessage() {
       const text = chatInput.value.trim()
       if (!text || chatLoading.value) return
 
-      // 添加用户消息
+      // 添加用户消息到界面 & 历史
       messages.value.push({ id: Date.now(), role: 'user', content: text, time: nowTime() })
+      chatHistory.value.push({ role: 'user', content: text })
       chatInput.value = ''
       chatLoading.value = true
 
@@ -670,10 +768,14 @@ createApp({
         const data = await apiFetch('/ask', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, history: chatHistory.value.slice(0, -1) }),
         })
+        // 将 AI 回复加入历史
+        chatHistory.value.push({ role: 'assistant', content: data.answer })
         messages.value.push({ id: Date.now() + 1, role: 'ai', content: data.answer, time: nowTime() })
       } catch (e) {
+        // 出错时把刚加入的用户消息从历史里移除，避免上下文污染
+        chatHistory.value.pop()
         showToast(e.message, 'error')
         messages.value.push({ id: Date.now() + 1, role: 'ai', content: '⚠️ 请求失败：' + e.message, time: nowTime() })
       } finally {
@@ -803,19 +905,123 @@ createApp({
       }
     }
 
+    // ══════════════════════════════════════════
+    // 页面四：RAG 知识库问答
+    // ══════════════════════════════════════════
+    const ragFile        = ref(null)
+    const ragUploadLoading = ref(false)
+    const ragUploadResult  = ref(null)
+    const ragMessages    = ref([])
+    const ragInput       = ref('')
+    const ragLoading     = ref(false)
+    const ragWindow      = ref(null)
+    const ragDocList     = ref([])
+    const ragDocLoading  = ref(false)
+    const RAG_ALLOWED    = ['.txt', '.pdf', '.md']
+
+    function validateRagFile(file) {
+      const ext = '.' + file.name.split('.').pop().toLowerCase()
+      if (!RAG_ALLOWED.includes(ext)) {
+        showToast(`不支持的格式：${ext}，仅接受 .txt / .pdf / .md`, 'error')
+        return false
+      }
+      if (file.size > 20 * 1024 * 1024) {
+        showToast('文件过大，上限 20 MB', 'error')
+        return false
+      }
+      return true
+    }
+
+    function handleRagFileSelect(e) {
+      const file = e.target.files[0]
+      if (file && validateRagFile(file)) {
+        ragFile.value = file
+        ragUploadResult.value = null
+      }
+    }
+
+    async function uploadRagDoc() {
+      if (!ragFile.value) return
+      ragUploadLoading.value = true
+      ragUploadResult.value = null
+      const form = new FormData()
+      form.append('file', ragFile.value)
+      try {
+        const data = await apiFetch('/rag/upload', { method: 'POST', body: form })
+        ragUploadResult.value = data
+        showToast(`上传成功：${ragFile.value.name}`, 'success')
+        ragFile.value = null
+        await loadRagDocs()
+      } catch (e) {
+        showToast(e.message, 'error')
+      } finally {
+        ragUploadLoading.value = false
+      }
+    }
+
+    async function loadRagDocs() {
+      ragDocLoading.value = true
+      try {
+        const data = await apiFetch('/rag/docs')
+        ragDocList.value = data.documents || []
+      } catch (e) {
+        ragDocList.value = []
+      } finally {
+        ragDocLoading.value = false
+      }
+    }
+
+    async function sendRagMessage() {
+      const text = ragInput.value.trim()
+      if (!text || ragLoading.value) return
+      ragMessages.value.push({ id: Date.now(), role: 'user', content: text, time: nowTime() })
+      ragInput.value = ''
+      ragLoading.value = true
+      await nextTick()
+      if (ragWindow.value) ragWindow.value.scrollTop = ragWindow.value.scrollHeight
+      try {
+        const data = await apiFetch('/rag/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text }),
+        })
+        const sources = (data.sources || []).map(s => `📄 ${s.filename}（相关度 ${s.score}）`).join('  ')
+        const full = data.answer + (sources ? `\n\n${sources}` : '')
+        ragMessages.value.push({ id: Date.now() + 1, role: 'ai', content: full, time: nowTime() })
+      } catch (e) {
+        showToast(e.message, 'error')
+        ragMessages.value.push({ id: Date.now() + 1, role: 'ai', content: '⚠️ 请求失败：' + e.message, time: nowTime() })
+      } finally {
+        ragLoading.value = false
+        await nextTick()
+        if (ragWindow.value) ragWindow.value.scrollTop = ragWindow.value.scrollHeight
+      }
+    }
+
+    // 切换到 rag 页时自动拉取文档列表
+    function setPage(id) {
+      currentPage.value = id
+      if (id === 'rag' && ragDocList.value.length === 0) loadRagDocs()
+    }
+
     // ──────────────────────────────────────────
     // 暴露给模板
     // ──────────────────────────────────────────
     return {
-      navItems, currentPage,
+      navItems, currentPage, setPage,
       toasts,
       // chat
-      messages, chatInput, chatLoading, chatWindow, sendMessage,
+      messages, chatInput, chatLoading, chatWindow, chatHistory, sendMessage, clearChat,
       // clean
       cleanFile, isDragOver, cleanLoading, cleanProgress, cleanResult,
       cleanConfig, handleFileSelect, handleDrop, runClean,
       // report
       reportFilename, reportLoading, reportResult, runReport,
+      // rag
+      ragFile, ragUploadLoading, ragUploadResult,
+      ragMessages, ragInput, ragLoading, ragWindow,
+      ragDocList, ragDocLoading,
+      handleRagFileSelect, uploadRagDoc, loadRagDocs, sendRagMessage,
     }
   }
 }).mount('#app')

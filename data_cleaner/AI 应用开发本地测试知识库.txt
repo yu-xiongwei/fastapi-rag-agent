@@ -1,0 +1,60 @@
+一、FastAPI 后端开发核心
+FastAPI 是基于 Python 的现代、高性能 Web 框架，基于 Starlette 和 Pydantic 构建，支持自动生成 OpenAPI 文档和类型提示
+FastAPI 的核心组件：路由装饰器 (@app.get/@app.post)、依赖注入 (Depends)、Pydantic 数据模型、异常处理、中间件
+FastAPI 中 CORS 跨域配置：使用 CORSMiddleware，允许指定 origins、methods、headers，生产环境禁止使用 ["*"]
+FastAPI 环境变量管理：推荐使用 python-dotenv 库，从.env 文件加载配置，敏感信息如 API Key 禁止硬编码
+FastAPI 异步处理：使用 async def 定义异步路由，配合异步 HTTP 客户端 (httpx.AsyncClient) 调用外部 API，避免阻塞事件循环
+FastAPI 请求体解析：使用 Pydantic BaseModel 定义请求模型，自动进行数据校验和类型转换
+FastAPI 常见错误：422 Unprocessable Entity (请求体格式错误)、404 Not Found (路由不存在)、500 Internal Server Error (服务器内部错误)
+二、RAG 检索增强生成架构
+RAG (Retrieval-Augmented Generation) 是将外部知识库检索与大语言模型生成结合的技术，解决模型知识过时和幻觉问题
+RAG 核心流程：文档加载→文档切分→向量化 (Embedding)→向量存储→检索→上下文拼接→模型生成
+文档切分策略：按字符切分、按句子切分、按语义切分，推荐使用 RecursiveCharacterTextSplitter，chunk_size=500-1000，chunk_overlap=50-100
+向量数据库作用：存储文档向量，支持相似度检索，常见本地向量数据库：ChromaDB、FAISS、LanceDB
+检索策略：相似度检索、MMR (最大边际相关性) 检索、重排序 (Re-rank)，重排序可显著提升检索精度
+上下文窗口管理：控制传入模型的上下文长度，避免超出模型最大 token 限制，同时保证信息完整性
+RAG 优化方向：更好的嵌入模型、更细粒度的文档切分、多轮检索、查询重写、知识图谱增强
+三、LangChain 框架使用
+LangChain 是用于构建 LLM 应用的开源框架，提供统一的接口封装各种 LLM、向量数据库、工具链
+LangChain 核心模块：LLMs/ChatModels、Embeddings、VectorStores、Retrievers、Chains、Agents、Callbacks
+LangChain 调用 OpenAI API：使用 ChatOpenAI 类，传入 api_key、model_name、temperature 等参数
+LangChain 调用阿里云通义千问 API：使用 ChatTongyi 类，需要安装 langchain-community 和 dashscope 库
+LangChain 链 (Chain)：将多个组件串联起来执行，常见链：RetrievalQA、ConversationalRetrievalChain、LLMChain
+LangChain 记忆 (Memory)：用于保存对话历史，实现多轮对话，常见记忆类型：ConversationBufferMemory、ConversationSummaryMemory
+LangChain 工具 (Tools)：允许 LLM 调用外部工具，如搜索引擎、计算器、数据库查询
+四、AI 模型 API 集成
+模型 API 调用通用流程：获取 API Key→构造请求头→构造请求体→发送 HTTP 请求→解析响应→错误处理
+常见 API 错误码：401 Unauthorized (API Key 无效 / 过期)、403 Forbidden (权限不足 / 账户欠费)、429 Too Many Requests (请求频率超限)、500 Internal Server Error (模型服务错误)
+API Key 安全管理：存储在环境变量中，后端转发请求，禁止前端直接暴露 API Key
+异步 API 调用：使用 httpx.AsyncClient 代替 requests，提高并发处理能力
+请求重试机制：使用 tenacity 库实现指数退避重试，处理临时网络错误和服务不可用
+流式响应处理：设置 stream=True，逐块接收模型生成的内容，提升用户体验
+模型参数说明：temperature (随机性，0-1)、max_tokens (最大生成长度)、top_p (核采样)、frequency_penalty (频率惩罚)
+五、常见问题排查
+输入 API Key 无法调用模型的常见原因：
+API Key 硬编码错误或环境变量未正确加载
+API Key 过期、被禁用或账户欠费
+请求头格式错误，如 Authorization 头缺少 "Bearer" 前缀
+网络问题，无法访问模型 API 端点
+代理配置错误，导致请求被拦截
+模型名称错误或该 API Key 无对应模型的访问权限
+请求体参数格式错误，缺少必填字段
+排查步骤：
+打印环境变量，确认 API Key 是否正确加载
+使用 curl 或 Postman 直接调用 API，验证 API Key 有效性
+检查请求头和请求体格式是否符合 API 文档
+查看网络连接和代理配置
+查看 API 返回的详细错误信息
+本地开发环境配置：
+创建.env 文件，存储所有敏感配置
+使用.gitignore 忽略.env 文件，防止泄露
+安装必要的依赖库，注意版本兼容性
+使用虚拟环境隔离项目依赖
+六、本地开发与测试
+本地 RAG 测试流程：准备测试文档→生成向量库→测试检索效果→测试生成效果
+本地嵌入模型推荐：bge-small-zh-v1.5、m3e-base、text2vec-base-chinese，支持 CPU 运行
+本地大模型推荐：Qwen-7B-Chat、Llama-3-8B-Instruct、Phi-3-mini-4k-instruct，可使用 Ollama 部署
+FastAPI 本地调试：使用 uvicorn 作为服务器，设置 reload=True 自动重载代码
+API 测试工具：Swagger UI (FastAPI 自动生成，访问 /docs)、Postman、curl
+日志配置：使用 logging 模块记录详细日志，方便排查问题
+单元测试：使用 pytest 编写测试用例，保证代码质量

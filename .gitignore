@@ -14,6 +14,8 @@ __pycache__/
 venv/
 env/
 .venv/
+.venv311/
+**/.venv311/
 ENV/
 
 # IDE 配置
@@ -27,6 +29,12 @@ Thumbs.db
 # 日志
 *.log
 logs/
+
+# 本地数据库/向量库
+*.db
+*.sqlite3
+chroma_db/
+**/chroma_db/
 
 # 依赖包（用 requirements.txt 代替）
 *.egg-info/

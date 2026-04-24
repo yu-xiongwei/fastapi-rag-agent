@@ -2,11 +2,19 @@ import chromadb
 from sentence_transformers import SentenceTransformer
 from safe_json_parse import safe_json_parse
 from openai import OpenAI
+import os
+import getpass
 
 # ── 1. 初始化 ──────────────────────────────────────
 model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+
+api_key = os.environ.get("DASHSCOPE_API_KEY")
+if not api_key:
+    api_key = getpass.getpass("请输入阿里云 DashScope API Key: ")
+    os.environ["DASHSCOPE_API_KEY"] = api_key
+
 client = OpenAI(
-    api_key="sk-4becd4ec98e6435293b76cb8ed7fbcaf",
+    api_key=api_key,
     base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 

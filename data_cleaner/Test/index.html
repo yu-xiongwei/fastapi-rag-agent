@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Listing 文案生成器</title>
+  <!-- 引入Vue3 CDN -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #f5f4f0;
+      color: #1a1a1a;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 28px;
+      letter-spacing: -0.3px;
+    }
+    .container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      width: 100%;
+      max-width: 960px;
+    }
+    @media (max-width: 700px) {
+      .container { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e5e3de;
+      padding: 24px;
+    }
+    .panel h2 {
+      font-size: 13px;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 18px;
+    }
+    label {
+      display: block;
+      font-size: 13px;
+      color: #555;
+      margin-bottom: 5px;
+      margin-top: 14px;
+    }
+    label:first-of-type { margin-top: 0; }
+    input, textarea, select {
+      width: 100%;
+      font-size: 14px;
+      font-family: inherit;
+      padding: 9px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #fafafa;
+      color: #1a1a1a;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: #aaa;
+      background: #fff;
+    }
+    textarea { resize: vertical; min-height: 80px; }
+    .api-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      margin-bottom: 20px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid #eee;
+    }
+    .api-row .field { flex: 1; }
+    button {
+      font-size: 14px;
+      font-weight: 500;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    button:active { transform: scale(0.98); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
+    #gen-btn {
+      width: 100%;
+      margin-top: 20px;
+      background: #1a1a1a;
+      color: #fff;
+      padding: 12px;
+      font-size: 15px;
+    }
+    #gen-btn:hover:not(:disabled) { opacity: 0.85; }
+    .output-block {
+      margin-bottom: 18px;
+      padding-bottom: 18px;
+      border-bottom: 1px solid #f0ede8;
+    }
+    .output-block:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .out-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .copy-btn {
+      font-size: 11px;
+      padding: 2px 9px;
+      background: transparent;
+      border: 1px solid #ddd;
+      color: #888;
+      border-radius: 5px;
+    }
+    .copy-btn:hover { background: #f5f4f0; }
+    .out-text {
+      font-size: 14px;
+      line-height: 1.65;
+      color: #1a1a1a;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .bullet { display: flex; gap: 8px; margin-bottom: 7px; font-size: 14px; line-height: 1.6; }
+    .bullet-dot { width: 5px; height: 5px; border-radius: 50%; background: #bbb; flex-shrink: 0; margin-top: 9px; }
+    .placeholder {
+      color: #ccc;
+      font-size: 14px;
+      text-align: center;
+      padding: 40px 0;
+    }
+    .error { color: #c0392b; font-size: 13px; margin-top: 10px; }
+    .spinner {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid #fff4;
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1> Listing 文案生成器</h1>
+    <div class="container">
+      <!-- 左侧：输入 -->
+      <div class="panel">
+        <h2>产品信息输入</h2>
+        
+        <label>产品名称 *</label>
+        <input type="text" v-model="form.name" placeholder="e.g. Bamboo Travel Pillow" />
+
+        <label>核心卖点 / 功能特性 *</label>
+        <textarea v-model="form.features" placeholder="....................."></textarea>
+
+        <label>目标关键词 *</label>
+        <input type="text" v-model="form.keywords" placeholder="travel pillow, neck pillow, flight pillow" />
+
+        <label>目标受众</label>
+        <input type="text" v-model="form.audience" placeholder="e.g. frequent flyers, backpackers" />
+
+        <label>竞品信息（可选）</label>
+        <textarea v-model="form.comp" placeholder="..................." style="min-height:60px;"></textarea>
+
+        <label>文案风格</label>
+        <select v-model="form.tone">
+          <option value="professional and trustworthy">专业可信赖</option>
+          <option value="friendly and enthusiastic">亲切热情</option>
+          <option value="minimalist and premium">简约高端</option>
+        </select>
+
+        <button id="gen-btn" @click="generate" :disabled="loading">
+          <span v-if="loading" class="spinner"></span>
+          {{ loading ? '生成中...' : '生成文案' }}
+        </button>
+        <div class="error" v-if="errorMsg">{{ errorMsg }}</div>
+      </div>
+
+      <!-- 右侧：输出 -->
+      <div class="panel">
+        <h2>生成结果</h2>
+        <div id="output" v-if="!outputData">
+          <div class="placeholder">填写左侧信息后点击「生成文案」</div>
+        </div>
+        <div v-else>
+          <!-- Title -->
+          <div class="output-block">
+            <div class="out-label">
+              Title
+              <button class="copy-btn" @click="copyText(outputData.title)">复制</button>
+            </div>
+            <div class="out-text">{{ outputData.title }}</div>
+          </div>
+
+          <!-- Bullets -->
+          <div class="output-block">
+            <div class="out-label">
+              5 Bullet Points
+              <button class="copy-btn" @click="copyText(outputData.bullets.map(b=>'• '+b).join('\\n'))">复制</button>
+            </div>
+            <div>
+              <div class="bullet" v-for="(bullet, idx) in outputData.bullets" :key="idx">
+                <div class="bullet-dot"></div>
+                <span>{{ bullet }}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div class="output-block">
+            <div class="out-label">
+              Description
+              <button class="copy-btn" @click="copyText(outputData.description)">复制</button>
+            </div>
+            <div class="out-text">{{ outputData.description }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      setup() {
+        // 响应式数据
+        const form = Vue.reactive({
+          name: '',
+          features: '',
+          keywords: '',
+          audience: '',
+          comp: '',
+          tone: 'professional and trustworthy'
+        });
+        const loading = Vue.ref(false);
+        const errorMsg = Vue.ref('');
+        const outputData = Vue.ref(null);
+
+        // 生成文案
+        const generate = async () => {
+          // 校验参数
+          if (!form.name || !form.features || !form.keywords) {
+            return errorMsg.value = '请填写产品名称、核心卖点和关键词';
+          }
+          errorMsg.value = '';
+          loading.value = true;
+          outputData.value = null;
+
+          try {
+            // 调用FastAPI后端
+            const res = await fetch('http://127.0.0.1:8000/generate-copy', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                name: form.name,
+                features: form.features,
+                keywords: form.keywords,
+                audience: form.audience,
+                comp: form.comp,
+                tone: form.tone
+              })
+            });
+
+            if (!res.ok) {
+              const err = await res.json().catch(() => ({}));
+              throw new Error(err.detail || `请求失败：${res.status}`);
+            }
+
+            const data = await res.json();
+            outputData.value = data;
+          } catch (e) {
+            errorMsg.value = '生成失败：' + e.message;
+            outputData.value = null;
+          } finally {
+            loading.value = false;
+          }
+        };
+
+        // 复制文本
+        const copyText = (text) => {
+          navigator.clipboard.writeText(text).then(() => {
+            alert('已复制！');
+          });
+        };
+
+        return { form, loading, errorMsg, outputData, generate, copyText };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
